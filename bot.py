@@ -1,60 +1,69 @@
 import os
 import logging
 import requests
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 from dotenv import load_dotenv
+from telegram import Update, Bot
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Get API keys from environment variables (Set these in Render)
+# Get API Keys from Environment Variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Google Gemini API URL
-API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
-
-# Logging setup
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Function to get a response from Google Gemini API
-def get_gemini_response(user_message):
-    headers = {"Content-Type": "application/json"}
-    data = {"contents": [{"role": "user", "parts": [{"text": user_message}]}]}
-    
-    try:
-        response = requests.post(API_URL, json=data, headers=headers)
-        response_json = response.json()
-        
-        if "candidates" in response_json:
-            return response_json["candidates"][0]["content"]["parts"][0]["text"]
-        return "Sorry, I couldn't generate a response."
-    
-    except Exception as e:
-        return f"Error: {str(e)}"
+# Initialize bot
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-# /start command handler
+# Function to handle the /start command
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text("Hello! I'm your AI chatbot. Ask me anything.")
+    update.message.reply_text("Hello! I'm your AI bot. Ask me anything.")
 
-# Handle user messages
+# Function to handle messages
 def handle_message(update: Update, context: CallbackContext) -> None:
     user_message = update.message.text
-    bot_response = get_gemini_response(user_message)
-    update.message.reply_text(bot_response)
+    response = get_gemini_ai_response(user_message)
+    update.message.reply_text(response)
 
-# Main function to start the bot
+# Function to call Google Gemini AI API
+def get_gemini_ai_response(user_input):
+    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
+    
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [
+            {"role": "user", "parts": [{"text": user_input}]}
+        ]
+    }
+
+    try:
+        response = requests.post(API_URL, json=payload, headers=headers)
+        response_data = response.json()
+
+        if response.status_code == 200:
+            return response_data['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Error: {response_data.get('error', {}).get('message', 'Unknown error')}"
+    except Exception as e:
+        return f"API request failed: {str(e)}"
+
+# Main function to run the bot
 def main():
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    updater = Updater(token=TELEGRAM_BOT_TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    # Handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
+    # Start the bot
     updater.start_polling()
     updater.idle()
 
-if __name__ == "__main__":
+# Run the bot
+if __name__ == '__main__':
     main()
